@@ -55,35 +55,51 @@ class HouseholdChoreSensor(Entity):
         }
 
     async def async_do_chore(self, helper_number=None):
-        """Mark the chore as done and update dates."""
         now = datetime.now(timezone.utc)
         self._data["last_done"] = now.isoformat()
-
-        days = self._data.get("days", 7)
-        next_due = now + timedelta(days=days)
-        self._data["next_due"] = next_due.isoformat()
-
+        days = self._data.get("days")
+        if days is None:
+            days = 7
+        points = self._data.get("points")
+        if points is None:
+            points = 1
+        self._data["next_due"] = (now + timedelta(days=days)).isoformat()
         self._data["status"] = self.calculate_status(self._data["next_due"])
 
-        # Increment helper number if provided
-        if helper_number:
-            current_value = float(
-                self.hass.states.get(helper_number).state or 0
-            )
-            new_value = current_value + self._data.get("points", 0)
-            await self.hass.services.async_call(
-                "input_number",
-                "set_value",
-                {"entity_id": helper_number, "value": new_value},
-            )
+        self.async_write_ha_state()  # update HA UI immediately
 
-        self.async_write_ha_state()
+        # increment helper number if given
+        if helper_number:
+            try:
+                current_state = self.hass.states.get(helper_number)
+                current_value = float(current_state.state) if current_state else 0
+                new_value = current_value + points
+                self.hass.async_create_task(
+                    self.hass.services.async_call(
+                        "input_number",
+                        "set_value",
+                        {"entity_id": helper_number, "value": new_value},
+                        blocking=True,
+                    )
+                )
+            except Exception as e:
+                _LOGGER.error("Failed to update helper number %s: %s", helper_number, e)
 
     async def async_set_value(self, field, value):
         """Update a single field on the chore."""
-        self._data[field] = value
+        if field in ["last_done", "next_due"] and isinstance(value, str):
+            try:
+                # Convert to ISO format if possible
+                datetime.fromisoformat(value)
+                self._data[field] = value
+            except Exception:
+                _LOGGER.warning("Invalid date format for %s: %s", field, value)
+        else:
+            self._data[field] = value
+
         if field in ["last_done", "next_due"]:
             self._data["status"] = self.calculate_status(self._data.get("next_due"))
+
         self.async_write_ha_state()
 
     def calculate_status(self, next_due_str):
