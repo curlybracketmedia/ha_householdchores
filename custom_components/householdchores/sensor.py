@@ -14,7 +14,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault("entities", {})
 
-    # Example: create one sensor per entry
     chore = HouseholdChoreSensor(hass, entry.data)
     hass.data[DOMAIN]["entities"][chore.unique_id] = chore
 

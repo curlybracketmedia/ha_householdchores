@@ -8,6 +8,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up Household Chores from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = entry.data
+    hass.data[DOMAIN].setdefault("entities", {})
 
     # Forward to sensor platform
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
@@ -16,17 +17,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         entity_id = call.data.get("entity_id")
         helper_number = call.data.get("helper_number")
 
-        entity = hass.data[DOMAIN].get("entities", {}).get(entity_id)
+        entity = hass.data[DOMAIN]["entities"].get(entity_id)
         if entity:
             await entity.async_do_chore(helper_number)
 
     async def async_set_value(call: ServiceCall):
         entity_id = call.data.get("entity_id")
-        # e.g. service is "householdchores.set_last_done"
         _, _, field = call.service.partition("set_")
         value = call.data.get("value")
 
-        entity = hass.data[DOMAIN].get("entities", {}).get(entity_id)
+        entity = hass.data[DOMAIN]["entities"].get(entity_id)
         if entity:
             await entity.async_set_value(field, value)
 
