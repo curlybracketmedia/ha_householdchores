@@ -1,7 +1,15 @@
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
-from .const import DOMAIN, CONF_NAME, CONF_LAST_DONE, CONF_NEXT_DUE, CONF_DAYS, CONF_POINTS
+
+from .const import (
+    DOMAIN,
+    CONF_NAME,
+    CONF_LAST_DONE,
+    CONF_NEXT_DUE,
+    CONF_DAYS,
+    CONF_POINTS,
+)
 
 
 class HouseholdChoresConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -10,13 +18,13 @@ class HouseholdChoresConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
-        """Handle the initial step."""
+        """Initial step for user to input chore configuration."""
         errors = {}
 
         if user_input is not None:
             return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
 
-        data_schema = vol.Schema(
+        schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
                 vol.Optional(CONF_LAST_DONE): str,
@@ -26,29 +34,32 @@ class HouseholdChoresConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
 
-        return self.async_show_form(step_id="user", data_schema=data_schema, errors=errors)
+        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return HouseholdChoresOptionsFlowHandler(config_entry)
+        return HouseholdChoresOptionsFlow(config_entry)
 
 
-class HouseholdChoresOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle options for an existing chore."""
+class HouseholdChoresOptionsFlow(config_entries.OptionsFlow):
+    """Handle options (editing) for an existing chore."""
 
     def __init__(self, config_entry):
-        """Initialize options flow."""
-        self.config_entry = config_entry
+        """Store the entry id for lookup."""
+        self._entry_id = config_entry.entry_id
 
     async def async_step_init(self, user_input=None):
-        """Manage options for the integration."""
+        """Show or process the options form."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        data = {**self.config_entry.data, **self.config_entry.options}
+        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        data = {}
+        data.update(entry.data)
+        data.update(entry.options)
 
-        data_schema = vol.Schema(
+        schema = vol.Schema(
             {
                 vol.Required(CONF_NAME, default=data.get(CONF_NAME)): str,
                 vol.Optional(CONF_LAST_DONE, default=data.get(CONF_LAST_DONE, "")): str,
@@ -58,4 +69,4 @@ class HouseholdChoresOptionsFlowHandler(config_entries.OptionsFlow):
             }
         )
 
-        return self.async_show_form(step_id="init", data_schema=data_schema)
+        return self.async_show_form(step_id="init", data_schema=schema)
