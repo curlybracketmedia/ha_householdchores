@@ -1,45 +1,76 @@
-from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.config_entries import ConfigEntry
+import voluptuous as vol
+from homeassistant import config_entries
+from homeassistant.core import callback
 
-from .const import DOMAIN
-
-
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    """Set up Household Chores from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = entry.data
-
-    # Forward to sensor platform
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
-
-    async def async_do_chore(call: ServiceCall):
-        entity_id = call.data.get("entity_id")
-        helper_number = call.data.get("helper_number")
-
-        entity = hass.data[DOMAIN].get("entities", {}).get(entity_id)
-        if entity:
-            await entity.async_do_chore(helper_number)
-
-    async def async_set_value(call: ServiceCall):
-        entity_id = call.data.get("entity_id")
-        # e.g. service is "householdchores.set_last_done"
-        _, _, field = call.service.partition("set_")
-        value = call.data.get("value")
-
-        entity = hass.data[DOMAIN].get("entities", {}).get(entity_id)
-        if entity:
-            await entity.async_set_value(field, value)
-
-    # Register services at the integration (domain) level
-    hass.services.async_register(DOMAIN, "do_chore", async_do_chore)
-    for field in ["last_done", "next_due", "days", "points"]:
-        hass.services.async_register(DOMAIN, f"set_{field}", async_set_value)
-
-    return True
+from .const import (
+    DOMAIN,
+    CONF_NAME,
+    CONF_LAST_DONE,
+    CONF_NEXT_DUE,
+    CONF_DAYS,
+    CONF_POINTS,
+)
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
-    """Unload a config entry."""
-    await hass.config_entries.async_forward_entry_unload(entry, "sensor")
-    hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-    return True
+class HouseholdChoresConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for the Household Chores integration."""
+
+    VERSION = 1
+
+    async def async_step_user(self, user_input=None):
+        """Initial step when user adds a chore via the UI."""
+        errors = {}
+
+        if user_input is not None:
+            return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
+
+        # Form schema
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): str,
+                vol.Optional(CONF_LAST_DONE, default=""): str,
+                vol.Optional(CONF_NEXT_DUE, default=""): str,
+                vol.Optional(CONF_DAYS, default=7): int,
+                vol.Optional(CONF_POINTS, default=1): int,
+            }
+        )
+
+        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Return options flow handler for this chore."""
+        return HouseholdChoresOptionsFlow(config_entry)
+
+
+class HouseholdChoresOptionsFlow(config_entries.OptionsFlow):
+    """Handle editing options for an existing chore."""
+
+    def __init__(self, config_entry):
+        """Store entry ID for lookup."""
+        self._entry_id = config_entry.entry_id
+
+    async def async_step_init(self, user_input=None):
+        """Show or handle the options form."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        # Lookup entry in HA
+        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        data = {}
+        if entry:
+            data.update(entry.data)
+            data.update(entry.options)
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=data.get(CONF_NAME, "")): str,
+                vol.Optional(CONF_LAST_DONE, default=data.get(CONF_LAST_DONE, "")): str,
+                vol.Optional(CONF_NEXT_DUE, default=data.get(CONF_NEXT_DUE, "")): str,
+                vol.Optional(CONF_DAYS, default=data.get(CONF_DAYS, 7)): int,
+                vol.Optional(CONF_POINTS, default=data.get(CONF_POINTS, 1)): int,
+            }
+        )
+
+        return self.async_show_form(step_id="init", data_schema=schema)
