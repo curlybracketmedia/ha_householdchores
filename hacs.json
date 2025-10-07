@@ -1,8 +1,8 @@
 {
-  "name": "householdchores",
+  "name": "Household Chores",
   "content_in_root": false,
   "domain": "householdchores",
   "homeassistant": "2023.1.0",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "zip_release": false
 }
