@@ -8,8 +8,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up Household Chores from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = entry.data
-    hass.data[DOMAIN]["entities"][f"sensor.{chore.unique_id}"] = chore
-
+    hass.data[DOMAIN].setdefault("entities", {})
 
     # Forward to sensor platform
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])

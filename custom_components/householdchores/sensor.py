@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 import logging
 
 from homeassistant.helpers.entity import Entity
-from homeassistant.core import callback
 
 from .const import DOMAIN
 
@@ -12,10 +11,12 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up Household Chores sensors from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN].setdefault("entities", {})
+    hass.data.setdefault("entities", {})
 
     chore = HouseholdChoreSensor(hass, entry.data)
-    hass.data[DOMAIN]["entities"][chore.unique_id] = chore
+    # Store entity keyed by full HA entity ID
+    hass.data["entities"] = hass.data.get("entities", {})
+    hass.data[DOMAIN]["entities"][f"sensor.{chore.unique_id}"] = chore
 
     async_add_entities([chore])
 
@@ -30,6 +31,19 @@ class HouseholdChoreSensor(Entity):
         self._attr_name = data.get("name", "Unnamed Chore")
         self._attr_unique_id = self._attr_name.lower().replace(" ", "_")
         self._state = None
+
+        # Set default values if missing
+        days = self._data.get("days", 7)
+        self._data.setdefault("days", days)
+        self._data.setdefault("points", self._data.get("points", 1))
+        self._data.setdefault("last_done", None)
+
+        if self._data.get("next_due") is None:
+            next_due = datetime.now(timezone.utc) + timedelta(days=days)
+            self._data["next_due"] = next_due.isoformat()
+
+        # Set initial status
+        self._data["status"] = self.calculate_status(self._data["next_due"])
 
     @property
     def name(self):
@@ -56,13 +70,11 @@ class HouseholdChoreSensor(Entity):
 
     async def async_do_chore(self, helper_number=None):
         now = datetime.now(timezone.utc)
+
+        days = self._data.get("days") or 7
+        points = self._data.get("points") or 1
+
         self._data["last_done"] = now.isoformat()
-        days = self._data.get("days")
-        if days is None:
-            days = 7
-        points = self._data.get("points")
-        if points is None:
-            points = 1
         self._data["next_due"] = (now + timedelta(days=days)).isoformat()
         self._data["status"] = self.calculate_status(self._data["next_due"])
 
@@ -89,7 +101,7 @@ class HouseholdChoreSensor(Entity):
         """Update a single field on the chore."""
         if field in ["last_done", "next_due"] and isinstance(value, str):
             try:
-                # Convert to ISO format if possible
+                # Validate ISO format
                 datetime.fromisoformat(value)
                 self._data[field] = value
             except Exception:
