@@ -27,7 +27,7 @@ class HouseholdChoreSensor(Entity):
     def __init__(self, hass, data):
         """Initialize the chore."""
         self.hass = hass
-        self._data = data
+        self._data = dict(data)
         self._attr_name = data.get("name", "Unnamed Chore")
         self._attr_unique_id = self._attr_name.lower().replace(" ", "_")
         self._state = None
