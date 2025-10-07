@@ -1,17 +1,17 @@
 {
   "domain": "householdchores",
-  "name": "MSP Integration 101 Intermediate Example",
+  "name": "Household Chores",
   "codeowners": [
-    "@msp1974"
+    "@curlybracketmedia"
   ],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/msp1974/HAIntegrationExamples",
+  "documentation": "https://github.com/curlybracketmedia/ha_householdchores",
   "homekit": {},
   "iot_class": "local_polling",
   "requirements": [],
   "single_config_entry": false,
   "ssdp": [],
-  "version": "1.0.1",
+  "version": "0.1.3",
   "zeroconf": []
 }
