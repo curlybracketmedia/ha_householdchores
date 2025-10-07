@@ -1,155 +1,74 @@
-"""Sensor setup for our Integration.
+from datetime import datetime, timedelta, timezone
+from homeassistant.helpers.entity import Entity
+from .const import DOMAIN, CONF_NAME, CONF_LAST_DONE, CONF_NEXT_DUE, CONF_DAYS, CONF_POINTS
+from .entity import parse_datetime, calculate_status
 
-Here we use a different method to define some of our entity classes.
-As, in our example, so much is common, we use our base entity class to define
-many properties, then our base sensor class to define the property to get the
-value of the sensor.
-
-As such, for all our other sensor types, we can just set the _attr_ value to
-keep our code small and easily readable.  You can do this for all entity properties(attributes)
-if you so wish, or mix and match to suit.
-"""
-
-from dataclasses import dataclass
-import logging
-
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    SensorStateClass,
-)
-from homeassistant.const import (
-    UnitOfElectricCurrent,
-    UnitOfElectricPotential,
-    UnitOfEnergy,
-    UnitOfTemperature,
-)
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-
-from . import MyConfigEntry
-from .base import ExampleBaseEntity
-from .coordinator import ExampleCoordinator
-
-_LOGGER = logging.getLogger(__name__)
+async def async_setup_entry(hass, entry, async_add_entities):
+    """Set up chore sensors."""
+    data = entry.data
+    entity = HouseholdChoreSensor(hass, entry.entry_id, data)
+    hass.data[DOMAIN].setdefault("entities", {})[entity.entity_id] = entity
+    async_add_entities([entity], True)
 
 
-@dataclass
-class SensorTypeClass:
-    """Class for holding sensor type to sensor class."""
-
-    type: str
-    sensor_class: object
-
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    config_entry: MyConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-):
-    """Set up the Sensors."""
-    # This gets the data update coordinator from the config entry runtime data as specified in your __init__.py
-    coordinator: ExampleCoordinator = config_entry.runtime_data.coordinator
-
-    # ----------------------------------------------------------------------------
-    # Here we enumerate the sensors in your data value from your
-    # DataUpdateCoordinator and add an instance of your sensor class to a list
-    # for each one.
-    # This maybe different in your specific case, depending on how your data is
-    # structured
-    # ----------------------------------------------------------------------------
-
-    sensor_types = [
-        SensorTypeClass("current", ExampleCurrentSensor),
-        SensorTypeClass("energy_delivered", ExampleEnergySensor),
-        SensorTypeClass("off_timer", ExampleOffTimerSensor),
-        SensorTypeClass("temperature", ExampleTemperatureSensor),
-        SensorTypeClass("voltage", ExampleVoltageSensor),
-    ]
-
-    sensors = []
-
-    for sensor_type in sensor_types:
-        sensors.extend(
-            [
-                sensor_type.sensor_class(coordinator, device, sensor_type.type)
-                for device in coordinator.data
-                if device.get(sensor_type.type)
-            ]
-        )
-
-    # Now create the sensors.
-    async_add_entities(sensors)
-
-
-class ExampleBaseSensor(ExampleBaseEntity, SensorEntity):
-    """Implementation of a sensor.
-
-    This inherits our ExampleBaseEntity to set common properties.
-    See base.py for this class.
-
-    https://developers.home-assistant.io/docs/core/entity/sensor
-    """
+class HouseholdChoreSensor(Entity):
+    def __init__(self, hass, entry_id, data):
+        self.hass = hass
+        self._entry_id = entry_id
+        self._name = data.get(CONF_NAME)
+        self._last_done = parse_datetime(data.get(CONF_LAST_DONE))
+        self._next_due = parse_datetime(data.get(CONF_NEXT_DUE))
+        self._days = data.get(CONF_DAYS, 7)
+        self._points = data.get(CONF_POINTS, 1)
 
     @property
-    def native_value(self) -> int | float:
-        """Return the state of the entity."""
-        # Using native value and native unit of measurement, allows you to change units
-        # in Lovelace and HA will automatically calculate the correct value.
-        return self.coordinator.get_device_parameter(self.device_id, self.parameter)
+    def name(self):
+        return self._name
 
+    @property
+    def unique_id(self):
+        return f"{self._entry_id}_{self._name.lower().replace(' ', '_')}"
 
-class ExampleCurrentSensor(ExampleBaseSensor):
-    """Class to handle current sensors.
+    @property
+    def state(self):
+        return calculate_status(self._next_due)
 
-    This inherits the ExampleBaseSensor and so uses all the properties and methods
-    from that class and then overrides specific attributes relevant to this sensor type.
-    """
+    @property
+    def extra_state_attributes(self):
+        return {
+            "last_done": self._last_done.isoformat() if self._last_done else None,
+            "next_due": self._next_due.isoformat() if self._next_due else None,
+            "days": self._days,
+            "points": self._points,
+        }
 
-    _attr_device_class = SensorDeviceClass.CURRENT
-    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
-    _attr_suggested_display_precision = 2
+    async def async_set_value(self, field, value):
+        if field == "last_done":
+            self._last_done = parse_datetime(value)
+        elif field == "next_due":
+            self._next_due = parse_datetime(value)
+        elif field == "days":
+            self._days = int(value)
+        elif field == "points":
+            self._points = int(value)
+        self.async_write_ha_state()
 
+    async def async_do_chore(self, helper_number=None):
+        now = datetime.now(timezone.utc)
+        self._last_done = now
+        self._next_due = now + timedelta(days=self._days)
 
-class ExampleEnergySensor(ExampleBaseSensor):
-    """Class to handle energy sensors.
+        # If helper_number provided, increment it
+        if helper_number:
+            await self.hass.services.async_call(
+                "input_number",
+                "set_value",
+                {
+                    "entity_id": helper_number,
+                    "value": float(self.hass.states.get(helper_number).state)
+                    + float(self._points),
+                },
+                blocking=True,
+            )
 
-    This inherits the ExampleBaseSensor and so uses all the properties and methods
-    from that class and then overrides specific attributes relevant to this sensor type.
-    """
-
-    _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
-
-
-class ExampleOffTimerSensor(ExampleBaseSensor):
-    """Class to handle off timer sensors.
-
-    This inherits the ExampleBaseSensor and so uses all the properties and methods
-    from that class and then overrides specific attributes relevant to this sensor type.
-    """
-
-
-class ExampleTemperatureSensor(ExampleBaseSensor):
-    """Class to handle temperature sensors.
-
-    This inherits the ExampleBaseSensor and so uses all the properties and methods
-    from that class and then overrides specific attributes relevant to this sensor type.
-    """
-
-    _attr_device_class = SensorDeviceClass.TEMPERATURE
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    _attr_suggested_display_precision = 1
-
-
-class ExampleVoltageSensor(ExampleBaseSensor):
-    """Class to handle voltage sensors.
-
-    This inherits the ExampleBaseSensor and so uses all the properties and methods
-    from that class and then overrides specific attributes relevant to this sensor type.
-    """
-
-    _attr_device_class = SensorDeviceClass.VOLTAGE
-    _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
-    _attr_suggested_display_precision = 0
+        self.async_write_ha_state()

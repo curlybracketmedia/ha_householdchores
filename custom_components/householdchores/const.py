@@ -1,12 +1,15 @@
-"""Constants for our integration."""
-
 DOMAIN = "householdchores"
 
-DEFAULT_SCAN_INTERVAL = 60
-MIN_SCAN_INTERVAL = 10
+CONF_NAME = "name"
+CONF_LAST_DONE = "last_done"
+CONF_NEXT_DUE = "next_due"
+CONF_DAYS = "days"
+CONF_POINTS = "points"
 
-RENAME_DEVICE_SERVICE_NAME = "rename_device_service"
-RESPONSE_SERVICE_NAME = "response_service"
-
-SET_OFF_TIMER_ENTITY_SERVICE_NAME = "set_off_timer"
-CONF_OFF_TIME = "off_time"
+STATUSES = {
+    "OVERDUE": "Overdue",
+    "DUE": "Due",
+    "DUE_SOON": "Due Soon",
+    "NOT_DUE": "Not Due",
+    "DO_NOT_DO": "Do Not Do",
+}
