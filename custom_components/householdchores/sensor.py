@@ -32,7 +32,6 @@ class HouseholdChoreSensor(Entity):
         self._data.setdefault("days", days)
         self._data.setdefault("points", self._data.get("points", 1))
         self._data.setdefault("last_done", None)
-        self._data.setdefault("last_done_by", None)
 
         if self._data.get("next_due") is None:
             next_due = datetime.now(timezone.utc) + timedelta(days=days)
@@ -55,37 +54,34 @@ class HouseholdChoreSensor(Entity):
     @property
     def extra_state_attributes(self):
         return {
-            "last_done_by": self._data.get("last_done_by"),
             "last_done": self._data.get("last_done"),
             "next_due": self._data.get("next_due"),
             "days": self._data.get("days"),
             "points": self._data.get("points"),
         }
 
-    async def async_do_chore(self, helper_number=None, last_done_by=None):
+    async def async_do_chore(self, helper_number=None):
         now = datetime.now(timezone.utc)
+        self._data["last_done"] = now.isoformat()
         days = self._data.get("days", 7)
         points = self._data.get("points", 1)
-
-        self._data["last_done"] = now.isoformat()
         self._data["next_due"] = (now + timedelta(days=days)).isoformat()
         self._data["status"] = self.calculate_status(self._data["next_due"])
-
-        if last_done_by:
-            self._data["last_done_by"] = last_done_by
+        self.async_write_ha_state()
 
         if helper_number:
-            current_state = self.hass.states.get(helper_number)
-            current_value = float(current_state.state) if current_state else 0
-            new_value = current_value + points
-            await self.hass.services.async_call(
-                "input_number",
-                "set_value",
-                {"entity_id": helper_number, "value": new_value},
-                blocking=True,
-            )
-
-        self.async_write_ha_state()
+            try:
+                current_state = self.hass.states.get(helper_number)
+                current_value = float(current_state.state) if current_state else 0
+                new_value = current_value + points
+                await self.hass.services.async_call(
+                    "input_number",
+                    "set_value",
+                    {"entity_id": helper_number, "value": new_value},
+                    blocking=True,
+                )
+            except Exception as e:
+                _LOGGER.error("Failed to update helper number %s: %s", helper_number, e)
 
     async def async_set_value(self, field, value):
         """Update a single field on the chore."""
@@ -103,3 +99,21 @@ class HouseholdChoreSensor(Entity):
 
         self.async_write_ha_state()
 
+    def calculate_status(self, next_due_str):
+        """Determine chore status based on next due datetime."""
+        if not next_due_str:
+            return "Do Not Do"
+        now = datetime.now(timezone.utc)
+        try:
+            next_due = datetime.fromisoformat(next_due_str)
+        except Exception:
+            return "Do Not Do"
+
+        delta = (next_due - now).total_seconds()
+        if delta < -172800:
+            return "Overdue"
+        elif delta < 0:
+            return "Due"
+        elif delta < 86400:
+            return "Due Soon"
+        return "Not Due"

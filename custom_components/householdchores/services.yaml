@@ -6,7 +6,7 @@ do_chore:
       description: "The entity id of the chore."
       example: "sensor.take_out_trash"
     helper_number:
-      description: "The Number you want to increase the points to (Optional)"
+      description: "Optional helper number to add points to."
       example: "input_number.chore_points"
 
 set_last_done:
