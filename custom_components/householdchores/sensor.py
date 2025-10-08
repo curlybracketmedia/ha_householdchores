@@ -25,7 +25,7 @@ class HouseholdChoreSensor(Entity):
         self._data = dict(data)  # make mutable copy
         self._attr_name = data.get("name", "Unnamed Chore")
         self._attr_unique_id = self._attr_name.lower().replace(" ", "_")
-        self.entity_id = f"sensor.{self._attr_unique_id}"
+        self.entity_id = f"sensor.householdchore_{self._attr_unique_id}"
 
         days = self._data.get("days", 7)
         self._data.setdefault("days", days)
