@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 import logging
 
 from homeassistant.helpers.entity import Entity
-
+from homeassistant.core import callback
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -11,12 +11,10 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up Household Chores sensors from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    hass.data.setdefault("entities", {})
+    hass.data[DOMAIN].setdefault("entities", {})
 
-    chore = HouseholdChoreSensor(hass, entry.data)
-    # Store entity keyed by full HA entity ID
-    hass.data["entities"] = hass.data.get("entities", {})
-    hass.data[DOMAIN]["entities"][f"sensor.{chore.unique_id}"] = chore
+    chore = HouseholdChoreSensor(hass, entry)
+    hass.data[DOMAIN]["entities"][chore.entity_id] = chore
 
     async_add_entities([chore])
 
@@ -24,15 +22,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class HouseholdChoreSensor(Entity):
     """Representation of a single chore as a sensor."""
 
-    def __init__(self, hass, data):
+    def __init__(self, hass, entry):
         """Initialize the chore."""
         self.hass = hass
-        self._data = dict(data)
-        self._attr_name = data.get("name", "Unnamed Chore")
+        self.entry = entry  # keep reference for persistence
+        self._data = dict(entry.data)
+        self._attr_name = self._data.get("name", "Unnamed Chore")
         self._attr_unique_id = self._attr_name.lower().replace(" ", "_")
-        self._state = None
+        self._attr_entity_id = f"sensor.{self._attr_unique_id}"
 
-        # Set default values if missing
+        # Set defaults if missing
         days = self._data.get("days", 7)
         self._data.setdefault("days", days)
         self._data.setdefault("points", self._data.get("points", 1))
@@ -45,6 +44,10 @@ class HouseholdChoreSensor(Entity):
         # Set initial status
         self._data["status"] = self.calculate_status(self._data["next_due"])
 
+    #
+    # ────────────────────────────── PROPERTIES ──────────────────────────────
+    #
+
     @property
     def name(self):
         return self._attr_name
@@ -52,6 +55,10 @@ class HouseholdChoreSensor(Entity):
     @property
     def unique_id(self):
         return self._attr_unique_id
+
+    @property
+    def entity_id(self):
+        return self._attr_entity_id
 
     @property
     def state(self):
@@ -68,19 +75,24 @@ class HouseholdChoreSensor(Entity):
             "points": self._data.get("points"),
         }
 
-    async def async_do_chore(self, helper_number=None):
-        now = datetime.now(timezone.utc)
+    #
+    # ────────────────────────────── CORE ACTIONS ──────────────────────────────
+    #
 
-        days = self._data.get("days") or 7
-        points = self._data.get("points") or 1
+    async def async_do_chore(self, helper_number=None):
+        """Mark the chore as done, update due dates, and award points."""
+        now = datetime.now(timezone.utc)
+        days = self._data.get("days", 7)
+        points = self._data.get("points", 1)
 
         self._data["last_done"] = now.isoformat()
         self._data["next_due"] = (now + timedelta(days=days)).isoformat()
         self._data["status"] = self.calculate_status(self._data["next_due"])
 
-        self.async_write_ha_state()  # update HA UI immediately
+        self.async_write_ha_state()
+        await self._save_to_entry()
 
-        # increment helper number if given
+        # Increment helper number if provided
         if helper_number:
             try:
                 current_state = self.hass.states.get(helper_number)
@@ -101,7 +113,6 @@ class HouseholdChoreSensor(Entity):
         """Update a single field on the chore."""
         if field in ["last_done", "next_due"] and isinstance(value, str):
             try:
-                # Validate ISO format
                 datetime.fromisoformat(value)
                 self._data[field] = value
             except Exception:
@@ -113,11 +124,25 @@ class HouseholdChoreSensor(Entity):
             self._data["status"] = self.calculate_status(self._data.get("next_due"))
 
         self.async_write_ha_state()
+        await self._save_to_entry()
+
+    #
+    # ────────────────────────────── HELPERS ──────────────────────────────
+    #
+
+    async def _save_to_entry(self):
+        """Persist updated data to the config entry for restart survival."""
+        try:
+            self.hass.config_entries.async_update_entry(self.entry, data=self._data)
+            _LOGGER.debug("Persisted chore '%s' data to config entry", self._attr_name)
+        except Exception as e:
+            _LOGGER.error("Failed to persist chore '%s': %s", self._attr_name, e)
 
     def calculate_status(self, next_due_str):
         """Determine the chore status based on next due datetime."""
         if not next_due_str:
             return "Do Not Do"
+
         now = datetime.now(timezone.utc)
         try:
             next_due = datetime.fromisoformat(next_due_str)
