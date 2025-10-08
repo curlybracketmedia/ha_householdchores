@@ -1,0 +1,14 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Add a Chore",
+        "data": {
+          "name": "Chore",
+          "days": "Days",
+          "points": "Points"
+        }
+      }
+    }
+  }
+}

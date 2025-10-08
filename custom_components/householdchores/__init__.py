@@ -34,7 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     # Register services
     hass.services.async_register(DOMAIN, "do_chore", async_do_chore)
-    for field in ["last_done", "next_due", "days", "points"]:
+    for field in ["last_done", "last_done_by", "next_due", "days", "points"]:
         hass.services.async_register(DOMAIN, f"set_{field}", async_set_value)
 
     return True

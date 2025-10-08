@@ -1,6 +1,7 @@
 DOMAIN = "householdchores"
 
 CONF_NAME = "name"
+CONF_LAST_DONE_BY = "last_done_by"
 CONF_LAST_DONE = "last_done"
 CONF_NEXT_DUE = "next_due"
 CONF_DAYS = "days"
