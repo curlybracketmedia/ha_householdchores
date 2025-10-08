@@ -12,7 +12,7 @@ class HouseholdChoresConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            # Dates are intentionally omitted — will be set automatically in sensor
+            # Dates are not required — sensor will create them automatically
             return self.async_create_entry(
                 title=user_input["name"],
                 data={
@@ -24,11 +24,12 @@ class HouseholdChoresConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 },
             )
 
+        # Voluptuous schema with readable labels
         schema = vol.Schema(
             {
-                vol.Required("name", description={"suggested_value": "New Chore"}): str,
-                vol.Required("days", description={"suggested_value": 7}): int,
-                vol.Required("points", description={"suggested_value": 1}): int,
+                vol.Required("name", description={"name": "Name"}): str,
+                vol.Required("days", description={"name": "Days"}): int,
+                vol.Required("points", description={"name": "Points"}): int,
             }
         )
 
@@ -36,9 +37,4 @@ class HouseholdChoresConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=schema,
             errors=errors,
-            description_placeholders={
-                "name": "Chore name or title",
-                "days": "Number of days until next due",
-                "points": "Points awarded when completed",
-            },
         )
