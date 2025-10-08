@@ -1,5 +1,5 @@
-from homeassistant import config_entries
 import voluptuous as vol
+from homeassistant import config_entries
 from .const import DOMAIN
 
 
@@ -9,32 +9,13 @@ class HouseholdChoresConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
-        errors = {}
-
         if user_input is not None:
-            # Dates are not required — sensor will create them automatically
-            return self.async_create_entry(
-                title=user_input["name"],
-                data={
-                    "name": user_input["name"],
-                    "days": user_input["days"],
-                    "points": user_input["points"],
-                    "last_done": None,
-                    "next_due": None,
-                },
-            )
+            return self.async_create_entry(title=user_input["name"], data=user_input)
 
-        # Voluptuous schema with readable labels
-        schema = vol.Schema(
-            {
-                vol.Required("name", description={"name": "Name"}): str,
-                vol.Required("days", description={"name": "Days"}): int,
-                vol.Required("points", description={"name": "Points"}): int,
-            }
-        )
+        schema = vol.Schema({
+            vol.Required("name", description={"name": "Name"}): str,
+            vol.Required("days", default=7, description={"name": "Days"}): int,
+            vol.Required("points", default=1, description={"name": "Points"}): int,
+        })
 
-        return self.async_show_form(
-            step_id="user",
-            data_schema=schema,
-            errors=errors,
-        )
+        return self.async_show_form(step_id="user", data_schema=schema)
