@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 import logging
 from homeassistant.helpers.entity import Entity
 from .const import DOMAIN
-from .entity import calculate_status
 
 _LOGGER = logging.getLogger(__name__)
 

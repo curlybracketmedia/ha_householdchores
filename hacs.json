@@ -3,6 +3,6 @@
   "content_in_root": false,
   "domain": "householdchores",
   "homeassistant": "2023.1.0",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "zip_release": false
 }
