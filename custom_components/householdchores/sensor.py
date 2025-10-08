@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 import logging
 
 from homeassistant.helpers.entity import Entity
-from homeassistant.core import callback
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -14,7 +13,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     hass.data[DOMAIN].setdefault("entities", {})
 
     chore = HouseholdChoreSensor(hass, entry)
-    hass.data[DOMAIN]["entities"][chore.entity_id] = chore
+    # Use unique_id for lookup
+    hass.data[DOMAIN]["entities"][chore.unique_id] = chore
 
     async_add_entities([chore])
 
@@ -29,7 +29,6 @@ class HouseholdChoreSensor(Entity):
         self._data = dict(entry.data)
         self._attr_name = self._data.get("name", "Unnamed Chore")
         self._attr_unique_id = self._attr_name.lower().replace(" ", "_")
-        self._attr_entity_id = f"sensor.{self._attr_unique_id}"
 
         # Set defaults if missing
         days = self._data.get("days", 7)
@@ -55,10 +54,6 @@ class HouseholdChoreSensor(Entity):
     @property
     def unique_id(self):
         return self._attr_unique_id
-
-    @property
-    def entity_id(self):
-        return self._attr_entity_id
 
     @property
     def state(self):
