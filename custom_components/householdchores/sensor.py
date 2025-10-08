@@ -5,14 +5,13 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up Household Chores sensors from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault("entities", {})
 
     chore = HouseholdChoreSensor(hass, entry.data)
-    async_add_entities([chore])
+    async_add_entities([chore], True)  # ensures .hass is assigned
 
     # Store using HA entity_id key so service lookups work
     hass.data[DOMAIN]["entities"][chore.entity_id] = chore
@@ -61,30 +60,36 @@ class HouseholdChoreSensor(Entity):
         }
 
     async def async_do_chore(self, helper_number=None):
+        """Mark the chore as done and optionally add points."""
+        if not self.hass:
+            _LOGGER.error("Cannot perform chore; hass is None for %s", self.entity_id)
+            return
+
         now = datetime.now(timezone.utc)
-        self._data["last_done"] = now.isoformat()
         days = self._data.get("days", 7)
         points = self._data.get("points", 1)
+
+        self._data["last_done"] = now.isoformat()
         self._data["next_due"] = (now + timedelta(days=days)).isoformat()
         self._data["status"] = self.calculate_status(self._data["next_due"])
-        self.async_write_ha_state()
 
         if helper_number:
-            try:
-                current_state = self.hass.states.get(helper_number)
-                current_value = float(current_state.state) if current_state else 0
-                new_value = current_value + points
-                await self.hass.services.async_call(
-                    "input_number",
-                    "set_value",
-                    {"entity_id": helper_number, "value": new_value},
-                    blocking=True,
-                )
-            except Exception as e:
-                _LOGGER.error("Failed to update helper number %s: %s", helper_number, e)
+            current_state = self.hass.states.get(helper_number)
+            current_value = float(current_state.state) if current_state else 0
+            new_value = current_value + points
+            await self.hass.services.async_call(
+                "input_number",
+                "set_value",
+                {"entity_id": helper_number, "value": new_value},
+                blocking=True,
+            )
+
+        self.async_write_ha_state()
 
     async def async_set_value(self, field, value):
         """Update a single field on the chore."""
+        from datetime import datetime
+
         if field in ["last_done", "next_due"] and isinstance(value, str):
             try:
                 datetime.fromisoformat(value)
@@ -100,15 +105,11 @@ class HouseholdChoreSensor(Entity):
         self.async_write_ha_state()
 
     def calculate_status(self, next_due_str):
-        """Determine chore status based on next due datetime."""
+        """Recalculate status based on next due date."""
         if not next_due_str:
             return "Do Not Do"
         now = datetime.now(timezone.utc)
-        try:
-            next_due = datetime.fromisoformat(next_due_str)
-        except Exception:
-            return "Do Not Do"
-
+        next_due = datetime.fromisoformat(next_due_str)
         delta = (next_due - now).total_seconds()
         if delta < -172800:
             return "Overdue"
@@ -116,4 +117,5 @@ class HouseholdChoreSensor(Entity):
             return "Due"
         elif delta < 86400:
             return "Due Soon"
-        return "Not Due"
+        else:
+            return "Not Due"
