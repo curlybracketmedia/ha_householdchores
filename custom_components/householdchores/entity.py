@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from homeassistant.core import callback
 
 class HouseholdChoreSensor:
     """Represents a chore entity."""
