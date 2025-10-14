@@ -5,6 +5,10 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+# Poll every minute so the status auto-updates (Due / Overdue / Not Due)
+SCAN_INTERVAL = timedelta(minutes=1)
+
+
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up Household Chores sensors from a config entry."""
     hass.data.setdefault(DOMAIN, {})
@@ -37,6 +41,26 @@ class HouseholdChoreSensor(Entity):
             self._data["next_due"] = next_due.isoformat()
 
         self._data["status"] = self.calculate_status(self._data["next_due"])
+
+    @property
+    def should_poll(self):
+        """Allow Home Assistant to poll this entity periodically."""
+        return True
+
+    async def async_update(self):
+        """Automatically called by Home Assistant every SCAN_INTERVAL."""
+        old_status = self._data.get("status")
+        new_status = self.calculate_status(self._data.get("next_due"))
+
+        if new_status != old_status:
+            self._data["status"] = new_status
+            _LOGGER.debug(
+                "Chore '%s' status updated from '%s' to '%s'",
+                self._attr_name,
+                old_status,
+                new_status,
+            )
+            self.async_write_ha_state()
 
     @property
     def name(self):
@@ -88,8 +112,6 @@ class HouseholdChoreSensor(Entity):
 
     async def async_set_value(self, field, value):
         """Update a single field on the chore."""
-        from datetime import datetime
-
         if field in ["last_done", "next_due"] and isinstance(value, str):
             try:
                 datetime.fromisoformat(value)
@@ -108,9 +130,11 @@ class HouseholdChoreSensor(Entity):
         """Recalculate status based on next due date."""
         if not next_due_str:
             return "Do Not Do"
+
         now = datetime.now(timezone.utc)
         next_due = datetime.fromisoformat(next_due_str)
         delta = (next_due - now).total_seconds()
+
         if delta < -172800:
             return "Overdue"
         elif delta < 0:
