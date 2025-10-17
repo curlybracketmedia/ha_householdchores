@@ -73,7 +73,7 @@ class HouseholdChoreSensor:
             return "Overdue"
         elif delta < 0:
             return "Due"
-        elif delta < 86400:
+        elif delta < 43200:
             return "Due Soon"
         else:
             return "Not Due"
